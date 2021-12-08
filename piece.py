@@ -11,6 +11,8 @@ class Piece():
 	QUEEN_ID = 4
 	KING_ID = 5
 
+	SLIDERS = [BISHOP_ID, ROOK_ID, QUEEN_ID]
+
 	WHITE_ID = 0
 	BLACK_ID = 1
 
@@ -29,6 +31,7 @@ class Piece():
 					    }
 
 	KNIGHT_MOVES = [ (-2, -1), (-2, 1), (-1, 2), (1, 2), (2, 1), (2, -1), (1, -2), (-1, -2) ]
+	KING_MOVES = list( zip( [-1]*3, list(range(-1, 2)) ) ) + [(0, -1), (0, 1)] + list( zip( [1]*3, list(range(-1, 2)) ) ) 
 
 	def __init__(self, team, type):
 		stringID = ''.join(random.choice(string.ascii_lowercase) for i in range(6))

@@ -1,5 +1,6 @@
 import numpy as np
 from gmpy2 import xmpz
+import copy
 
 from piece import Piece
 from move import Move
@@ -12,11 +13,13 @@ class Board():
 	RIGHT = 1
 	DOWN = 2
 	LEFT = 3
+	ORTHOGONAL = [UP, RIGHT, DOWN, LEFT]
 
 	UP_LEFT = 4
 	UP_RIGHT = 5
 	DOWN_RIGHT = 6
 	DOWN_LEFT = 7
+	DIAGONAL = [UP_LEFT, UP_RIGHT, DOWN_RIGHT, DOWN_LEFT]
 
 	# board is a list of piece id
 	board = [[(-1, -1)] * 8 for i in range(8)]
@@ -34,7 +37,15 @@ class Board():
 	whitePieces = {}
 	blackPieces = {}
 
+	KINGSIDE_CASTLING = 0
+	QUEENSIDE_CASTLING = 1
 	castlingRights = [True] * 4
+	kingPositions = { Piece.WHITE_ID: Piece.INITIAL_POSITIONS[(Piece.WHITE_ID, Piece.KING_ID)][0],
+					  Piece.BLACK_ID: Piece.INITIAL_POSITIONS[(Piece.BLACK_ID, Piece.KING_ID)][0] }
+
+	check = False
+	checkmate = False
+	numCheckers = 0
 
 	enPassantPos = None
 
@@ -60,6 +71,11 @@ class Board():
 		self.numBlackPieces = 16
 		self.turn = 0
 		self.castlingRights = [True] * 4
+		kingPositions = { Piece.WHITE_ID: Piece.INITIAL_POSITIONS[(Piece.WHITE_ID, Piece.KING_ID)][0],
+					      Piece.BLACK_ID: Piece.INITIAL_POSITIONS[(Piece.BLACK_ID, Piece.KING_ID)][0] }
+		self.check = False
+		self.checkmate = False
+		self.numCheckers = 0
 		self.enPassantPos = None
 		self.printBoard()
 
@@ -77,7 +93,6 @@ class Board():
 
 			print(str)
 
-
 	def sumTuples(self, t1, t2):
 		return (t1[0]+t2[0], t1[1]+t2[1])
 
@@ -89,10 +104,55 @@ class Board():
 		return self.legalPosition(pos) and self.board[pos[0]][pos[1]][0] != team
 
 	def enemyInPosition(self, pos, team):
-		return self.legalPosition(pos) and self.board[pos[0]][pos[1]][0] != team and self.board[pos[0]][pos[1]][0] != -1
+		
+		enemy = self.legalPosition(pos) and self.board[pos[0]][pos[1]][0] != team and self.board[pos[0]][pos[1]][0] != -1
+		type = None
+		if enemy:
+			type = self.board[pos[0]][pos[1]][1]
+
+		return enemy, type
 
 	def emptyPosition(self, pos):
 		return self.legalPosition(pos) and self.board[pos[0]][pos[1]][0] == -1
+
+	def isPositionAttacked(self, pos, team):
+		attacked = False
+		numAttackers = 0
+		for dir in (self.ORTHOGONAL+self.DIAGONAL):
+			l, attack, attacker = self.slide(pos, None, team, dir)
+
+			if attack:
+				attacked = True
+				numAttackers += 1
+
+				if numAttackers == 2:
+					break
+		for inc in Piece.KNIGHT_MOVES:
+			targetPos = self.sumTuples(pos, inc)
+			enemy, type = self.enemyInPosition(targetPos, team)
+			if enemy and type == Piece.KNIGHT_ID:
+				attacked = True
+				numAttackers+=1
+				
+				if numAttackers == 2:
+					break
+
+		return attacked, numAttackers
+
+	def isKingInCheck(self, team):
+		return self.isPositionAttacked(self.kingPositions[team] ,team)	
+
+	def isMoveLegal(self, move, team):
+		# check if our king will be in check after executing move 
+		newBoard = copy.deepcopy(self)
+		newBoard.doMove(move)
+		legal = not newBoard.isKingInCheck(team)[0]
+		print(legal)
+		newBoard.printBoard()
+		return legal
+
+	def aptForCastlingPosition(self, pos, team):
+		return self.emptyPosition(pos) and not self.isPositionAttacked(pos, team)[0]
 
 	def slide(self, origin, dest, team, direction):
 
@@ -100,6 +160,11 @@ class Board():
 
 		x = origin[1]
 		y = origin[0]
+
+		attacked = False
+		attacker = None
+
+		diff = 1 if team == Piece.WHITE_ID else -1
 
 		inc = (0, 0)
 		switch = {
@@ -119,34 +184,53 @@ class Board():
 		stop = not self.legalPosition(pos)
 		while not stop:
 			targetTeam = self.board[pos[0]][pos[1]][0] 
+			targetType = self.board[pos[0]][pos[1]][1]
 
 			if targetTeam != team:
-				l.append(pos)
+				capture = False
+				if targetTeam != -1:
+					capture = True
+				
+				l.append(Move(team, origin, pos, capture=capture))
 
 			newPos = (pos[0] + inc[0], pos[1] + inc[1])
 
 			if targetTeam != -1 or not self.legalPosition(newPos) or pos == dest:
 				stop = True
 
+			if targetTeam != -1 and targetTeam != team:
+				if (direction in self.ORTHOGONAL and 
+				   (targetType == Piece.ROOK_ID or targetType == Piece.QUEEN_ID)):
+					attacked = True
+					attacker = targetType
+				elif (direction in self.DIAGONAL and
+					  (targetType == Piece.QUEEN_ID or targetType == Piece.BISHOP_ID)):
+					attacked = True
+					attacker = targetType
+				elif (direction in self.DIAGONAL and targetType == Piece.PAWN_ID and
+				       y - pos[0] == diff):
+					attacked = True
+					attacker = targetType
+
 			pos = newPos
 
-		return l
+		return l, attacked, attacker
 
 	def calculateLegalMovesRook(self, pos, team):
 		legalMoves = []
-		legalMoves += self.slide(pos, None, team, self.UP)
-		legalMoves += self.slide(pos, None, team, self.LEFT)
-		legalMoves += self.slide(pos, None, team, self.DOWN)
-		legalMoves += self.slide(pos, None, team, self.RIGHT)
+		legalMoves += self.slide(pos, None, team, self.UP)[0]
+		legalMoves += self.slide(pos, None, team, self.LEFT)[0]
+		legalMoves += self.slide(pos, None, team, self.DOWN)[0]
+		legalMoves += self.slide(pos, None, team, self.RIGHT)[0]
 
 		return legalMoves
 
 	def calculateLegalMovesBishop(self, pos, team):
 		legalMoves = []
-		legalMoves += self.slide(pos, None, team, self.UP_LEFT)
-		legalMoves += self.slide(pos, None, team, self.UP_RIGHT)
-		legalMoves += self.slide(pos, None, team, self.DOWN_LEFT)
-		legalMoves += self.slide(pos, None, team, self.DOWN_RIGHT)
+		legalMoves += self.slide(pos, None, team, self.UP_LEFT)[0]
+		legalMoves += self.slide(pos, None, team, self.UP_RIGHT)[0]
+		legalMoves += self.slide(pos, None, team, self.DOWN_LEFT)[0]
+		legalMoves += self.slide(pos, None, team, self.DOWN_RIGHT)[0]
 
 		return legalMoves
 
@@ -160,7 +244,8 @@ class Board():
 		for inc in Piece.KNIGHT_MOVES:
 			targetPos = self.sumTuples(pos, inc)
 			if self.accessiblePosition(targetPos, team):
-				legalMoves.append(targetPos)
+				enemy, type = self.enemyInPosition(pos, team)
+				legalMoves.append(Move(team, pos, targetPos, capture=enemy))
 
 		return legalMoves
 
@@ -174,27 +259,43 @@ class Board():
 		targetPos = (pos[0]+incY, pos[1])
 
 		empty1 = self.emptyPosition(targetPos)
+		finalY = {Piece.WHITE_ID:7, Piece.BLACK_ID:0}
 		# check if we can advance forward
 		if empty1:
-			legalMoves.append(targetPos)
+			promoted = None
+			if targetPos[0] == finalY[team]:
+				promoted = Piece.QUEEN_ID
+
+			legalMoves.append(Move(team, pos, targetPos, promoted=promoted))
 
 		initialY = {Piece.WHITE_ID: 6, Piece.BLACK_ID: 1}
 		if pos[0] == initialY[team]:
 			targetPos = (pos[0] + incY*2, pos[1])
 			if empty1 and self.emptyPosition(targetPos):
-				legalMoves.append(targetPos)
+				enPassantPos = None
 
 				for incX in [-1, 1]:
 					candidatePos = (targetPos[0], targetPos[1]+incX)
-					if self.enemyInPosition(targetPos, team) and self.board[targetPos[0]][targetPos[1]].type == Piece.PAWN_ID:
+					enemy, type = self.enemyInPosition(candidatePos, team)
+					if enemy and type == Piece.PAWN_ID:
 						# indicate in this legalMove that enPassant would be set
 						print("triggered en passant")
+						enPassantPos = self.sumTuples(targetPos, (-incY, 0))
+						break
+
+				legalMoves.append(Move(team, pos, targetPos, enPassantPos=enPassantPos))
+
+
 
 		# check if we can capture pieces
 		for incX in [-1, 1]:
 			targetPos = self.sumTuples(pos, (incY, incX))
-			if self.enemyInPosition(targetPos, team):
-				legalMoves.append(targetPos)
+			if self.enemyInPosition(targetPos, team)[0]:
+				promoted = None
+				if targetPos[0] == finalY[team]:
+					promoted = Piece.QUEEN_ID
+
+				legalMoves.append(Move(team, pos, targetPos, capture=True, promoted=promoted))
 
 		# Lastly, check if we can capture en passant
 		if self.enPassantPos != None:
@@ -203,41 +304,77 @@ class Board():
 				diff = 1
 
 				if self.enPassantPos[0]-pos[0] == diff and abs(self.enPassantPos[1]-pos[1]) == 1:
-					legalMoves.append(self.enPassantPos)
+					legalMoves.append(Move(team, pos, self.enPassantPos, capture=True, passant=True))
 
 		return legalMoves
 
+	def calculateLegalMovesKing(self, pos, team):
+		legalMoves = []
+		for inc in Piece.KING_MOVES:
+			targetPos = self.sumTuples(pos, inc)
+			if self.accessiblePosition(targetPos, team):
+				legalMoves.append(Move(team, pos, targetPos))
+
+		ind = 0 if team == Piece.WHITE_ID else 2
+
+		#TODO check if squares are attacked
+		if (self.castlingRights[ind] and 
+		    self.aptForCastlingPosition(self.sumTuples(self.kingPositions[team], (0, 1)), team) and
+		 	self.aptForCastlingPosition(self.sumTuples(self.kingPositions[team], (0, 2)), team) ):
+			targetPos = self.sumTuples(pos, (0, 2))
+			legalMoves.append(Move(team, pos, targetPos, castling=self.KINGSIDE_CASTLING))
+
+		if (self.castlingRights[ind+1] and
+	    	self.aptForCastlingPosition(self.sumTuples(self.kingPositions[team], (0, -1)), team) and
+	 		self.aptForCastlingPosition(self.sumTuples(self.kingPositions[team], (0, -2)), team) and 
+	 		self.aptForCastlingPosition(self.sumTuples(self.kingPositions[team], (0, -3)), team) ):
+			targetPos = self.sumTuples(pos, (0, -2))
+			legalMoves.append(Move(team, pos, targetPos, castling=self.QUEENSIDE_CASTLING))
+
+		return legalMoves
 
 	def calculateLegalMoves(self):
 		legalMoves = []
-		attacked_squares = xmpz(0)
-		king_danger_squares = xmpz(0)
+		#attacked_squares = xmpz(0)
+		#king_danger_squares = xmpz(0)
 
-		if self.turn % 2 == Piece.WHITE_ID:
-			# compute attacked squares
-			for key, pos in self.whitePieces.items():
+		team = self.turn % 2
+		pieces = self.whitePieces
+		if team == Piece.BLACK_ID:
+			pieces = self.blackPieces
+
+		moveList = []
+		if self.numCheckers <= 1:
+			for key, pos in pieces.items():
 				type = self.board[pos[0]][pos[1]][1]
 
 				if type == Piece.ROOK_ID:
-					moveList = self.calculateLegalMovesRook(pos, self.turn%2)
-					print(moveList)
+					moveList += self.calculateLegalMovesRook(pos, team)
 				elif type == Piece.BISHOP_ID:
-					moveList = self.calculateLegalMovesBishop(pos, self.turn%2)
-					print(moveList)
+					moveList += self.calculateLegalMovesBishop(pos, team)
 				elif type == Piece.QUEEN_ID:
-					moveList = self.calculateLegalMovesQueen(pos, self.turn%2)
-					print(moveList)
+					moveList += self.calculateLegalMovesQueen(pos, team)
 				elif type == Piece.KNIGHT_ID:
-					moveList = self.calculateLegalMovesKnight(pos, self.turn%2)
-					print("knight")
-					print(moveList)
+					moveList += self.calculateLegalMovesKnight(pos, team)
 				elif type == Piece.PAWN_ID:
-					moveList = self.calculateLegalMovesPawn(pos, self.turn%2)
-					print("pawn")
-					print(moveList)
+					moveList += self.calculateLegalMovesPawn(pos, team)
+				elif type == Piece.KING_ID:
+					moveList += self.calculateLegalMovesKing(pos, team)
 		else:
-			print("Si no")
+			# more than 1 checker => we can only move the king
+			moveList += self.calculateLegalMovesKing(self.kingPositions[team], team)
 
+		# after getting all the possible moves, we will eliminate those that leave our king in check
+
+		#moveList = [ move for move in moveList if self.isMoveLegal(move, team) ]
+
+		for move in moveList:
+			move.print()
+
+		if not moveList:
+			self.checkmate = True
+
+		return moveList
 
 	def getNextMove(self):
 
@@ -261,9 +398,9 @@ class Board():
 
 			promoted = None
 			if originID[1] == Piece.PAWN_ID and (dest[0] == 0 or dest[0] == 7):
-				promoted = input("Select piece to promote: ") 
+				promoted = Piece.QUEEN_ID
 
-			move = Move(team, origin, dest, captured, None, promoted)
+			move = Move(team, origin, dest, capture=True, promoted=promoted)
 			if True: # move in legalMoves
 				break
 
@@ -277,8 +414,32 @@ class Board():
 		origin = move.origin
 		dest = move.dest
 		piece_id = self.board[origin[0]][origin[1]]
+		
+		if move.promoted:
+			piece_id = (piece_id[0], promoted, piece_id[2])
+
 		self.board[origin[0]][origin[1]] = Piece.EMPTY_PIECE_ID
 		self.board[dest[0]][dest[1]] = piece_id
+
+		if piece_id[0] == Piece.KING_ID:
+			self.kingPositions[move.team] = dest
+
+		if move.castling:
+			origin2 = (origin[0], dest[1]+1)
+			dest2 = (origin[0], origin[1]+1)
+				
+			if move.castling == self.QUEENSIDE_CASTLING:
+				origin2 = (origin[0], dest[1]-2)
+				dest2 = (origin[0], origin[1]-1)
+
+			piece_id2 = self.board[origin2[0]][origin2[1]]
+			self.board[origin2[0]][origin2[1]] = Piece.EMPTY_PIECE_ID
+			self.board[dest2[0]][dest[1]] = piece_id2
+
+			if move.team == Piece.WHITE_ID:
+				self.whitePieces[piece_id2[2]] = dest2
+			else:
+				self.blackPieces[piece_id2[2]] = dest2
 
 		if move.team == Piece.WHITE_ID:
 			self.whitePieces[piece_id[2]] = dest
@@ -292,12 +453,15 @@ class Board():
 			else:
 				self.board[dest[0]-1][dest[1]] = Piece.EMPTY_PIECE_ID
 
-		if move.team == Piece.WHITE_ID:
-			self.numBlackPieces-=1
-		else:
-			self.numWhitePieces-=1
-		
+		if move.enPassantPos:
+			self.enPassantPos = move.enPassantPos
 
+		if move.capture:
+			if move.team == Piece.WHITE_ID:
+				self.numBlackPieces-=1
+			else:
+				self.numWhitePieces-=1
 
+		self.turn += 1
 
-		
+		self.check, self.numCheckers = self.isKingInCheck(self.turn%2)		
