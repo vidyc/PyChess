@@ -1,6 +1,7 @@
 import numpy as np
 from gmpy2 import xmpz
 import copy
+import pygame
 
 from piece import Piece
 from move import Move
@@ -49,7 +50,8 @@ class Board():
 
 	enPassantPos = None
 
-	def __init__(self):
+	def __init__(self, pyChess):
+		self.pyChess = pyChess
 		self.initialBoardState()
 
 	def initialBoardState(self):
@@ -78,6 +80,7 @@ class Board():
 		self.numCheckers = 0
 		self.enPassantPos = None
 		self.printBoard()
+		self.displayBoard()
 
 	def printBoard(self):
 		for row in self.board:
@@ -93,8 +96,24 @@ class Board():
 
 			print(str)
 
+	def displayBoard(self):
+		self.pyChess.displayBoard()
+
+		for (i, row) in enumerate(self.board):
+			for (j, piece) in enumerate(row):
+				if piece[0] != -1:
+					self.pyChess.displayPiece(piece[0], piece[1], j, i)
+
+		self.pyChess.update()
+
 	def sumTuples(self, t1, t2):
 		return (t1[0]+t2[0], t1[1]+t2[1])
+
+	def getPieceInPosition(self, pos, team):
+		if self.legalPosition(pos) and self.board[pos[0]][pos[1]][0] == team:
+			return self.board[pos[0]][pos[1]][1]
+
+		return None
 
 	def legalPosition(self, pos):
 		return pos[0] >= 0 and pos[0] < self.BOARD_SIZE and pos[1] >= 0 and pos[1] < self.BOARD_SIZE
