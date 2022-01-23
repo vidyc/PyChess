@@ -22,6 +22,8 @@ class Board():
 	DOWN_LEFT = 7
 	DIAGONAL = [UP_LEFT, UP_RIGHT, DOWN_RIGHT, DOWN_LEFT]
 
+	POSSIBLE_PROMOTION = [ Piece.KNIGHT_ID, Piece.BISHOP_ID, Piece.ROOK_ID, Piece.QUEEN_ID]
+
 	# board is a list of piece id
 	board = [[(-1, -1)] * 8 for i in range(8)]
 
@@ -67,12 +69,14 @@ class Board():
 					      Piece.BLACK_ID: Piece.INITIAL_POSITIONS[(Piece.BLACK_ID, Piece.KING_ID)][0] }
 		self.check = False
 		self.checkmate = False
+		self.stalemate = False
 		self.numCheckers = 0
 		self.enPassantPos = None
 		self.printBoard()
 		self.displayBoard()
 
 	def printBoard(self):
+		print(self.castlingRights)
 		for row in self.board:
 			str = ""
 			for piece in row:
@@ -88,13 +92,15 @@ class Board():
 
 	def displayBoard(self):
 		self.pyChess.displayBoard()
+		self.displayPieces()
 
+		self.pyChess.update()
+
+	def displayPieces(self):
 		for (i, row) in enumerate(self.board):
 			for (j, piece) in enumerate(row):
 				if piece[0] != -1:
 					self.pyChess.displayPiece(piece[0], piece[1], j, i)
-
-		self.pyChess.update()
 
 	def sumTuples(self, t1, t2):
 		return (t1[0]+t2[0], t1[1]+t2[1])
@@ -268,14 +274,14 @@ class Board():
 		targetPos = (pos[0]+incY, pos[1])
 
 		empty1 = self.emptyPosition(targetPos)
-		finalY = {Piece.WHITE_ID:7, Piece.BLACK_ID:0}
+		finalY = {Piece.WHITE_ID:0, Piece.BLACK_ID:7}
 		# check if we can advance forward
 		if empty1:
-			promoted = None
 			if targetPos[0] == finalY[team]:
-				promoted = Piece.QUEEN_ID
-
-			legalMoves.append(Move(team, pos, targetPos, promoted=promoted))
+				for type in self.POSSIBLE_PROMOTION:
+					legalMoves.append(Move(team, pos, targetPos, promoted=type))
+			else:
+				legalMoves.append(Move(team, pos, targetPos, promoted=None))
 
 		initialY = {Piece.WHITE_ID: 6, Piece.BLACK_ID: 1}
 		if pos[0] == initialY[team]:
@@ -302,9 +308,10 @@ class Board():
 			if self.enemyInPosition(targetPos, team)[0]:
 				promoted = None
 				if targetPos[0] == finalY[team]:
-					promoted = Piece.QUEEN_ID
-
-				legalMoves.append(Move(team, pos, targetPos, capture=True, promoted=promoted))
+					for type in self.POSSIBLE_PROMOTION:
+						legalMoves.append(Move(team, pos, targetPos, promoted=type))
+				else:
+					legalMoves.append(Move(team, pos, targetPos, capture=True, promoted=None))
 
 		# Lastly, check if we can capture en passant
 		if self.enPassantPos != None:
@@ -312,8 +319,12 @@ class Board():
 			if team == Piece.BLACK_ID:
 				diff = 1
 
-				if self.enPassantPos[0]-pos[0] == diff and abs(self.enPassantPos[1]-pos[1]) == 1:
-					legalMoves.append(Move(team, pos, self.enPassantPos, capture=True, passant=True))
+			print(self.enPassantPos)
+
+			if self.enPassantPos[0]-pos[0] == diff and abs(self.enPassantPos[1]-pos[1]) == 1:
+				legalMoves.append(Move(team, pos, self.enPassantPos, capture=True, passant=True))
+				m = Move(team, pos, self.enPassantPos, capture=True, passant=True)
+				m.print()
 
 		return legalMoves
 
@@ -352,7 +363,6 @@ class Board():
 		if team == Piece.BLACK_ID:
 			pieces = self.blackPieces
 
-		print(pieces)
 		moveList = []
 		if self.numCheckers <= 1:
 			for key, pos in pieces.items():
@@ -378,13 +388,17 @@ class Board():
 
 		moveList = [ move for move in moveList if self.isMoveLegal(move, team) ]
 
-		print(pieces)
-
 		#for move in moveList:
 		#	move.print()
 
 		if not moveList:
-			self.checkmate = True
+			self.checkmate = self.check
+			self.stalemate = not self.check
+
+		if self.checkmate:
+			print("CHECKMATE!")
+		elif self.stalemate:
+			print("STALEMATE!")
 
 		return moveList
 
@@ -423,22 +437,32 @@ class Board():
 		# move mueve una pieza de una posicion a otra
 		# con la posibilidad de eliminar una pieza
 
+		self.enPassantPos = None
 		origin = move.origin
 		dest = move.dest
 		piece_id = self.board[origin[0]][origin[1]]
 		dest_piece_id = self.board[dest[0]][dest[1]]
+		if move.passant:
+			inc = 1 if move.team == Piece.WHITE_ID else -1
+			dest_piece_id = self.board[dest[0]+inc][dest[1]]
 		
 		if move.promoted != None:
-			piece_id = (piece_id[0], promoted, piece_id[2])
+			print("Promotion")
+			piece_id = (piece_id[0], move.promoted, piece_id[2])
 
 		self.board[origin[0]][origin[1]] = Piece.EMPTY_PIECE_ID
 		self.board[dest[0]][dest[1]] = piece_id
 
+		ind = 0 if move.team == Piece.WHITE_ID else 2
 		if piece_id[1] == Piece.KING_ID:
 			self.kingPositions[move.team] = dest
-			ind = 0 if move.team == Piece.WHITE_ID else 2
 			self.castlingRights[ind] = False
 			self.castlingRights[ind+1] = False
+		elif piece_id[1] == Piece.ROOK_ID:
+			if origin[1] == 7:
+				self.castlingRights[ind] = False
+			else:
+				self.castlingRights[ind+1] = False
 
 		if move.castling != None:
 			origin2 = (origin[0], dest[1]+1)
