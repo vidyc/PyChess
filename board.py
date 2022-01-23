@@ -35,20 +35,8 @@ class Board():
 	numWhitePieces = 0
 	numBlackPieces = 0
 
-	whitePieces = {}
-	blackPieces = {}
-
 	KINGSIDE_CASTLING = 0
 	QUEENSIDE_CASTLING = 1
-	castlingRights = [True] * 4
-	kingPositions = { Piece.WHITE_ID: Piece.INITIAL_POSITIONS[(Piece.WHITE_ID, Piece.KING_ID)][0],
-					  Piece.BLACK_ID: Piece.INITIAL_POSITIONS[(Piece.BLACK_ID, Piece.KING_ID)][0] }
-
-	check = False
-	checkmate = False
-	numCheckers = 0
-
-	enPassantPos = None
 
 	def __init__(self, pyChess):
 		self.pyChess = pyChess
@@ -56,6 +44,8 @@ class Board():
 
 	def initialBoardState(self):
 		self.board = [[(-1, -1)] * self.BOARD_SIZE for i in range(self.BOARD_SIZE)]
+		self.whitePieces = {}
+		self.blackPieces = {}
 
 		for key, positions in Piece.INITIAL_POSITIONS.items():
 			for pos in positions:
@@ -73,7 +63,7 @@ class Board():
 		self.numBlackPieces = 16
 		self.turn = 0
 		self.castlingRights = [True] * 4
-		kingPositions = { Piece.WHITE_ID: Piece.INITIAL_POSITIONS[(Piece.WHITE_ID, Piece.KING_ID)][0],
+		self.kingPositions = { Piece.WHITE_ID: Piece.INITIAL_POSITIONS[(Piece.WHITE_ID, Piece.KING_ID)][0],
 					      Piece.BLACK_ID: Piece.INITIAL_POSITIONS[(Piece.BLACK_ID, Piece.KING_ID)][0] }
 		self.check = False
 		self.checkmate = False
@@ -165,9 +155,9 @@ class Board():
 		# check if our king will be in check after executing move 
 		newBoard = copy.deepcopy(self)
 		newBoard.doMove(move)
-		legal = not newBoard.isKingInCheck(team)[0]
-		print(legal)
-		newBoard.printBoard()
+		legal = not (newBoard.isKingInCheck(team)[0])
+		#print(legal)
+		#newBoard.printBoard()
 		return legal
 
 	def aptForCastlingPosition(self, pos, team):
@@ -263,7 +253,7 @@ class Board():
 		for inc in Piece.KNIGHT_MOVES:
 			targetPos = self.sumTuples(pos, inc)
 			if self.accessiblePosition(targetPos, team):
-				enemy, type = self.enemyInPosition(pos, team)
+				enemy, type = self.enemyInPosition(targetPos, team)
 				legalMoves.append(Move(team, pos, targetPos, capture=enemy))
 
 		return legalMoves
@@ -336,19 +326,19 @@ class Board():
 
 		ind = 0 if team == Piece.WHITE_ID else 2
 
-		#TODO check if squares are attacked
 		if (self.castlingRights[ind] and 
 		    self.aptForCastlingPosition(self.sumTuples(self.kingPositions[team], (0, 1)), team) and
 		 	self.aptForCastlingPosition(self.sumTuples(self.kingPositions[team], (0, 2)), team) ):
 			targetPos = self.sumTuples(pos, (0, 2))
-			legalMoves.append(Move(team, pos, targetPos, castling=self.KINGSIDE_CASTLING))
+			m = Move(team, pos, targetPos, castling=Board.KINGSIDE_CASTLING)
+			legalMoves.append(m)
 
 		if (self.castlingRights[ind+1] and
 	    	self.aptForCastlingPosition(self.sumTuples(self.kingPositions[team], (0, -1)), team) and
 	 		self.aptForCastlingPosition(self.sumTuples(self.kingPositions[team], (0, -2)), team) and 
 	 		self.aptForCastlingPosition(self.sumTuples(self.kingPositions[team], (0, -3)), team) ):
 			targetPos = self.sumTuples(pos, (0, -2))
-			legalMoves.append(Move(team, pos, targetPos, castling=self.QUEENSIDE_CASTLING))
+			legalMoves.append(Move(team, pos, targetPos, castling=Board.QUEENSIDE_CASTLING))
 
 		return legalMoves
 
@@ -362,6 +352,7 @@ class Board():
 		if team == Piece.BLACK_ID:
 			pieces = self.blackPieces
 
+		print(pieces)
 		moveList = []
 		if self.numCheckers <= 1:
 			for key, pos in pieces.items():
@@ -385,10 +376,12 @@ class Board():
 
 		# after getting all the possible moves, we will eliminate those that leave our king in check
 
-		#moveList = [ move for move in moveList if self.isMoveLegal(move, team) ]
+		moveList = [ move for move in moveList if self.isMoveLegal(move, team) ]
 
-		for move in moveList:
-			move.print()
+		print(pieces)
+
+		#for move in moveList:
+		#	move.print()
 
 		if not moveList:
 			self.checkmate = True
@@ -433,27 +426,34 @@ class Board():
 		origin = move.origin
 		dest = move.dest
 		piece_id = self.board[origin[0]][origin[1]]
+		dest_piece_id = self.board[dest[0]][dest[1]]
 		
-		if move.promoted:
+		if move.promoted != None:
 			piece_id = (piece_id[0], promoted, piece_id[2])
 
 		self.board[origin[0]][origin[1]] = Piece.EMPTY_PIECE_ID
 		self.board[dest[0]][dest[1]] = piece_id
 
-		if piece_id[0] == Piece.KING_ID:
+		if piece_id[1] == Piece.KING_ID:
 			self.kingPositions[move.team] = dest
+			ind = 0 if move.team == Piece.WHITE_ID else 2
+			self.castlingRights[ind] = False
+			self.castlingRights[ind+1] = False
 
-		if move.castling:
+		if move.castling != None:
 			origin2 = (origin[0], dest[1]+1)
 			dest2 = (origin[0], origin[1]+1)
 				
+			print(origin2)
+			print(dest2)
+
 			if move.castling == self.QUEENSIDE_CASTLING:
 				origin2 = (origin[0], dest[1]-2)
 				dest2 = (origin[0], origin[1]-1)
 
 			piece_id2 = self.board[origin2[0]][origin2[1]]
 			self.board[origin2[0]][origin2[1]] = Piece.EMPTY_PIECE_ID
-			self.board[dest2[0]][dest[1]] = piece_id2
+			self.board[dest2[0]][dest2[1]] = piece_id2
 
 			if move.team == Piece.WHITE_ID:
 				self.whitePieces[piece_id2[2]] = dest2
@@ -478,8 +478,10 @@ class Board():
 		if move.capture:
 			if move.team == Piece.WHITE_ID:
 				self.numBlackPieces-=1
+				self.blackPieces.pop(dest_piece_id[2], None)
 			else:
 				self.numWhitePieces-=1
+				self.whitePieces.pop(dest_piece_id[2], None)
 
 		self.turn += 1
 

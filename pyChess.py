@@ -1,6 +1,7 @@
 from board import Board
 from piece import Piece
 import pygame
+import sys
 
 class PyChess():
 
@@ -15,6 +16,7 @@ class PyChess():
 	pygame.init()
 	gameDisplay = pygame.display.set_mode((WIDTH, HEIGHT))
 	pygame.display.set_caption("PyChess")
+	FPS_CLOCK = pygame.time.Clock()
 
 	BOARD_IMG = pygame.transform.scale(pygame.image.load("assets/chessboard_gray.png"), (WIDTH, HEIGHT))
 
@@ -57,22 +59,68 @@ class PyChess():
 		self.isGameOver = False
 		restart = False
 
-		mousePressed = False
+		click_state = 0
+		origin = (-1, -1)
+		destination = (-1, -1)
+		move = None
+		legalMoves = []
+		calculated = False
 		while not restart:
 			while not self.isGameOver:
-				legalMoves = self.board.calculateLegalMoves()
+				if not calculated:
+					legalMoves = self.board.calculateLegalMoves()
+					calculated = True
 
-				for event in pygame.event.get()
+				for event in pygame.event.get():
 					if event.type == pygame.MOUSEBUTTONDOWN:
 						left, middle, right = pygame.mouse.get_pressed()
 
 						if left:
-							
+							mouseCoordinates = pygame.mouse.get_pos()
+							i = int(mouseCoordinates[1] / self.PIECE_WIDTH)
+							j = int(mouseCoordinates[0] / self.PIECE_HEIGHT)
+							print("click en coordenadas " + str(mouseCoordinates) + " " + str((i, j)))
+							print(click_state)
+							if self.board.enemyInPosition((i, j), (self.board.turn+1)%2)[0]:
+								click_state = 1
+								origin = (i, j)
+								self.board.displayBoard()
+								pygame.draw.rect(self.gameDisplay, (50, 200, 20), 
+									(j*self.PIECE_WIDTH, i*self.PIECE_HEIGHT, self.PIECE_WIDTH, self.PIECE_HEIGHT))
+								pygame.display.update()
+							# si es el segundo click y la casilla es accesible para nuestro equipo
+							elif click_state == 1 and self.board.accessiblePosition((i, j), self.board.turn%2):
+								destination = (i, j)
+								click_state = 2
+							else:
+								click_state = 0		
+								origin = (-1, -1)
+								destination = (-1, -1)
+					elif event.type == pygame.QUIT:
+						sys.exit("Quitting...")
 
+				if click_state == 2:
+					# check if the selected move is a legal move
+					for m in legalMoves:
+						if m.origin == origin and m.dest == destination:
+							move = m
 
-				self.board.doMove(move)
-				self.board.printBoard()
-				self.board.displayBoard()
+					if move == None:
+						click_state = 0
+						origin = (-1, -1)
+						destination = (-1, -1)
+
+				if move != None:
+					self.board.doMove(move)
+					self.board.printBoard()
+					self.board.displayBoard()
+					
+					move = None
+					click_state = 0
+					origin = (-1, -1)
+					destination = (-1, -1)
+					legalMoves = []
+					calculated = False
 
 			restart = input("Restart game?: ")
 			if restart:
