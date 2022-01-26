@@ -12,7 +12,7 @@ class Move():
 		# passant capture will be possible for the opposing team
 		# promoted = piece id to which our piece has been promoted
 
-		self.notation = "si claro"
+		self.notation = "to be decided"
 		self.team = team
 		self.origin = origin
 		self.dest = dest

@@ -34,6 +34,8 @@ class Board():
 	# 0 -> white, 1 -> black
 	turn = 0
 
+	pyChess = None
+
 	numWhitePieces = 0
 	numBlackPieces = 0
 
@@ -96,10 +98,10 @@ class Board():
 
 		self.pyChess.update()
 
-	def displayPieces(self):
+	def displayPieces(self, exclude=[]):
 		for (i, row) in enumerate(self.board):
 			for (j, piece) in enumerate(row):
-				if piece[0] != -1:
+				if piece[0] != -1 and not piece[2] in exclude:
 					self.pyChess.displayPiece(piece[0], piece[1], j, i)
 
 	def sumTuples(self, t1, t2):
@@ -159,7 +161,7 @@ class Board():
 
 	def isMoveLegal(self, move, team):
 		# check if our king will be in check after executing move 
-		newBoard = copy.deepcopy(self)
+		newBoard = copy.deepcopy(self, {id(self.pyChess): self.pyChess})
 		newBoard.doMove(move)
 		legal = not (newBoard.isKingInCheck(team)[0])
 		#print(legal)
@@ -259,7 +261,7 @@ class Board():
 		for inc in Piece.KNIGHT_MOVES:
 			targetPos = self.sumTuples(pos, inc)
 			if self.accessiblePosition(targetPos, team):
-				enemy, type = self.enemyInPosition(targetPos, team)
+				enemy, _ = self.enemyInPosition(targetPos, team)
 				legalMoves.append(Move(team, pos, targetPos, capture=enemy))
 
 		return legalMoves
@@ -333,7 +335,8 @@ class Board():
 		for inc in Piece.KING_MOVES:
 			targetPos = self.sumTuples(pos, inc)
 			if self.accessiblePosition(targetPos, team):
-				legalMoves.append(Move(team, pos, targetPos))
+				enemy, _ = self.enemyInPosition(targetPos, team)
+				legalMoves.append(Move(team, pos, targetPos, capture=enemy))
 
 		ind = 0 if team == Piece.WHITE_ID else 2
 

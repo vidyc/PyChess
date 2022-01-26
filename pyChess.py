@@ -39,6 +39,8 @@ class PyChess():
 	WHITE_PAWN_IMG = pygame.transform.smoothscale(pygame.image.load("assets/white_pawn.png"), (PIECE_WIDTH, PIECE_HEIGHT))
 	WHITE_ROOK_IMG = pygame.transform.smoothscale(pygame.image.load("assets/white_rook.png"), (PIECE_WIDTH, PIECE_HEIGHT))
 
+	PIECE_MOVE_ANIMATION_FRAMES = 5
+
 	DISPLAY_COLOR = (25, 77, 0)
 
 	PIECE_IMAGES = { (Piece.WHITE_ID, Piece.PAWN_ID):  WHITE_PAWN_IMG,
@@ -90,6 +92,13 @@ class PyChess():
 			self.legalMoves = []
 			self.calculatedLegalMoves = False
 			self.executeMove = False
+
+			self.pieceAnimationPosition = None
+			self.animateMove = False
+			self.animationFrames = PyChess.PIECE_MOVE_ANIMATION_FRAMES
+			self.posDelta = (PyChess.PIECE_WIDTH / self.animationFrames, PyChess.PIECE_HEIGHT / self.animationFrames)
+			self.animationImg = None
+			self.animationpieceId = ""
 
 			self.promotion = False
 			while not self.isGameOver:
@@ -154,10 +163,28 @@ class PyChess():
 						self.executeMove = False
 				
 				if self.handleRendering and self.framecount == 0:
-					print("RENDERING")
+					
+					if self.animateMove and self.animationFrames > 0:
+						self.pieceAnimationPosition = (self.pieceAnimationPosition[0] + self.posDelta[0],
+													   self.pieceAnimationPosition[1] + self.posDelta[1])
+
+						self.displayBoard()
+						self.board.displayPieces(exclude=[self.animationpieceId])
+						self.gameDisplay.blit(self.animationImg, (self.pieceAnimationPosition[0], self.pieceAnimationPosition[1],
+							self.PIECE_WIDTH, self.PIECE_HEIGHT))
+						
+						self.animationFrames -= 1
+					elif self.animationFrames == 0:
+						self.animateMove = False
+						self.pieceAnimationPosition = None
+
+						self.handleKeyboardEvents = True
+						self.handleMouseEvents = True
+						self.handleUpdates = True				
+
 					pygame.display.update()
 				
-				self.framecount = (self.framecount + 1) % 180
+				self.framecount = (self.framecount + 1) % 6
 
 			restart_str = input("Restart game?: ").lower()
 			accepted_strings = ["yes", "y", "true"]
@@ -194,8 +221,6 @@ class PyChess():
 					xInc = self.PIECE_WIDTH/5
 					yInc = self.PIECE_HEIGHT/5
 					if capture:
-						#pygame.draw.rect(self.gameDisplay, self.DISPLAY_COLOR, 
-						#	(x*self.PIECE_WIDTH, y*self.PIECE_HEIGHT, self.PIECE_WIDTH, self.PIECE_HEIGHT), width=10)
 						pygame.draw.polygon(self.gameDisplay, self.DISPLAY_COLOR,
 							points=[(width, height), (width + xInc, height), (width, height + yInc)])
 						pygame.draw.polygon(self.gameDisplay, self.DISPLAY_COLOR,
@@ -214,6 +239,24 @@ class PyChess():
 			# si es el segundo click y la casilla es accesible para nuestro equipo
 			elif self.click_state == 1 and self.board.accessiblePosition((i, j), self.board.turn%2):
 				self.destination = (i, j)
+				
+				self.pieceAnimationPosition = (self.origin[1] * self.PIECE_WIDTH, self.origin[0] * self.PIECE_HEIGHT)
+				self.animateMove = True
+				self.animationFrames = PyChess.PIECE_MOVE_ANIMATION_FRAMES
+				incY = i - self.origin[0]
+				incX = j - self.origin[1]
+				
+				self.posDelta = (PyChess.PIECE_WIDTH / self.animationFrames, PyChess.PIECE_HEIGHT / self.animationFrames)
+				self.posDelta = (self.posDelta[0] * incX, self.posDelta[1] * incY)
+
+				pieceId = self.board.board[self.origin[0]][self.origin[1]]
+				self.animationImg = PyChess.PIECE_IMAGES[(pieceId[0], pieceId[1])]
+				self.animationpieceId = pieceId[2]
+
+				self.handleUpdates = False
+				self.handleKeyboardEvents = False
+				self.handleMouseEvents = False
+
 				self.click_state = 2
 			else:
 				self.click_state = 0	
