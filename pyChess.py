@@ -1,3 +1,5 @@
+from distutils.util import execute
+from turtle import pos
 from board import Board
 from piece import Piece
 import pygame
@@ -37,6 +39,8 @@ class PyChess():
 	WHITE_PAWN_IMG = pygame.transform.smoothscale(pygame.image.load("assets/white_pawn.png"), (PIECE_WIDTH, PIECE_HEIGHT))
 	WHITE_ROOK_IMG = pygame.transform.smoothscale(pygame.image.load("assets/white_rook.png"), (PIECE_WIDTH, PIECE_HEIGHT))
 
+	DISPLAY_COLOR = (25, 77, 0)
+
 	PIECE_IMAGES = { (Piece.WHITE_ID, Piece.PAWN_ID):  WHITE_PAWN_IMG,
 					(Piece.BLACK_ID, Piece.PAWN_ID):   BLACK_PAWN_IMG,
 					(Piece.WHITE_ID, Piece.KNIGHT_ID): WHITE_KNIGHT_IMG,
@@ -66,110 +70,183 @@ class PyChess():
 
 	def startGame(self):
 		self.isGameOver = False
-		restart = True
+		self.restart = True
 
-		while restart:
-			click_state = 0
-			origin = (-1, -1)
-			destination = (-1, -1)
-			move = None
-			legalMoves = []
-			calculated = False
-			promotion = False
-			promotion_type = None
+		self.handleMouseEvents = True
+		self.handleKeyboardEvents = True
+
+		self.handleUpdates = True
+
+		self.handleRendering = True
+
+		while self.restart:
+			self.framecount = 0
+			self.click_state = 0
+			
+			self.origin = (-1, -1)
+			self.destination = (-1, -1)
+			
+			self.move = None
+			self.legalMoves = []
+			self.calculatedLegalMoves = False
+			self.executeMove = False
+
+			self.promotion = False
 			while not self.isGameOver:
 				self.FPS_CLOCK.tick(180)
-				if not calculated:
-					legalMoves = self.board.calculateLegalMoves()
-					self.isGameOver = self.board.checkmate or self.board.stalemate
-					calculated = True
 
+				######################################################
+				################### EVENT HANDLING ###################
+				######################################################
 				for event in pygame.event.get():
-					if event.type == pygame.MOUSEBUTTONDOWN:
-						left, middle, right = pygame.mouse.get_pressed()
-
-						if left and not promotion:
-							mouseCoordinates = pygame.mouse.get_pos()
-							i = int(mouseCoordinates[1] / self.PIECE_WIDTH)
-							j = int(mouseCoordinates[0] / self.PIECE_HEIGHT)
-							print("click en coordenadas " + str(mouseCoordinates) + " " + str((i, j)))
-							print(click_state)
-							if self.board.enemyInPosition((i, j), (self.board.turn+1)%2)[0]:
-								click_state = 1
-								origin = (i, j)
-								self.displayBoard()
-								pygame.draw.rect(self.gameDisplay, (77, 166, 255), 
-									(j*self.PIECE_WIDTH, i*self.PIECE_HEIGHT, self.PIECE_WIDTH, self.PIECE_HEIGHT))
-								self.board.displayPieces()
-								pygame.display.update()
-							# si es el segundo click y la casilla es accesible para nuestro equipo
-							elif click_state == 1 and self.board.accessiblePosition((i, j), self.board.turn%2):
-								destination = (i, j)
-								click_state = 2
-							else:
-								click_state = 0	
-								origin = (-1, -1)
-								destination = (-1, -1)
-								self.board.displayBoard()
-								pygame.display.update()	
-					elif promotion and event.type == pygame.KEYDOWN:
-						if event.key == pygame.key.key_code("q"):
-							print("QUEEN")
-							move.promoted = Piece.QUEEN_ID
-							promotion = False
-						elif event.key == pygame.key.key_code("w"):
-							print("ROOK")
-							move.promoted = Piece.ROOK_ID
-							promotion = False
-						elif event.key == pygame.key.key_code("e"):
-							print("BISHOP")
-							move.promoted = Piece.BISHOP_ID
-							promotion = False
-						elif event.key == pygame.key.key_code("r"):
-							print("KNIGHT")
-							move.promoted = Piece.KNIGHT_ID
-							promotion = False
+					if self.handleMouseEvents and event.type == pygame.MOUSEBUTTONDOWN:
+						self.mouseEvents()
+					elif self.handleKeyboardEvents and event.type == pygame.KEYDOWN:
+						self.keyboardEvents(event)
 					elif event.type == pygame.QUIT:
 						sys.exit("Quitting...")
 
-				if click_state == 2 and not promotion:
-					# check if the selected move is a legal move
-					for m in legalMoves:
-						if m.origin == origin and m.dest == destination:
-							move = m
-							move.print()
+				####################################################
+				###################  UPDATE GAME ###################
+				####################################################
+
+				if self.handleUpdates and self.framecount % 4 == 0:
+					if not self.calculatedLegalMoves:
+						self.legalMoves = self.board.calculateLegalMoves()
+						self.isGameOver = self.board.checkmate or self.board.stalemate
+						self.calculatedLegalMoves = True
+						if self.isGameOver:
 							break
 
-					if move == None:
-						click_state = 0
-						origin = (-1, -1)
-						destination = (-1, -1)
-						self.board.displayBoard()
-						pygame.display.update()	
-					elif move.promoted != None:	
-						promotion = True
-						click_state = 0
+					if self.click_state == 2:
+						# check if the selected move is a legal move
+						for m in self.legalMoves:
+							if m.origin == self.origin and m.dest == self.destination:
+								self.executeMove = True
+								self.move = m
+								self.move.print()
+								break
 
-				if move != None and not promotion:
-					self.board.doMove(move)
-					self.board.printBoard()
-					self.board.displayBoard()
-					
-					move = None
-					click_state = 0
-					origin = (-1, -1)
-					destination = (-1, -1)
-					legalMoves = []
-					calculated = False
+						if not self.executeMove:
+							self.click_state = 0
+							self.origin = (-1, -1)
+							self.destination = (-1, -1)
+							self.board.displayBoard()
+						elif self.move.promoted != None:	
+							self.executeMove = False
+							self.promotion = True
+							self.click_state = 0
+							self.handleUpdates = False
+							self.handleMouseEvents = False
+	
+					if self.executeMove:
+						self.board.doMove(self.move)
+						self.board.printBoard()
+						self.board.displayBoard()
+
+						self.click_state = 0
+						
+						self.origin = (-1, -1)
+						self.destination = (-1, -1)
+						
+						self.legalMoves = []
+						self.calculatedLegalMoves = False
+						self.executeMove = False
+				
+				if self.handleRendering and self.framecount == 0:
+					print("RENDERING")
+					pygame.display.update()
+				
+				self.framecount = (self.framecount + 1) % 180
 
 			restart_str = input("Restart game?: ").lower()
 			accepted_strings = ["yes", "y", "true"]
 			if restart_str in accepted_strings:
-				restart = True
+				self.restart = True
 				self.board.initialBoardState()
 				self.isGameOver = False
 			else:
-				restart = False
+				self.restart = False
+
+	def mouseEvents(self):
+		left, middle, right = pygame.mouse.get_pressed()
+
+		if left:
+			mouseCoordinates = pygame.mouse.get_pos()
+			i = int(mouseCoordinates[1] / self.PIECE_WIDTH)
+			j = int(mouseCoordinates[0] / self.PIECE_HEIGHT)
+
+			if self.board.enemyInPosition((i, j), (self.board.turn+1)%2)[0]:
+				self.click_state = 1
+				self.origin = (i, j)
+
+				possible_moves = self.obtainPossibleMoves(self.origin)
+
+				self.displayBoard()
+				pygame.draw.rect(self.gameDisplay, self.DISPLAY_COLOR, 
+					(j*self.PIECE_WIDTH, i*self.PIECE_HEIGHT, self.PIECE_WIDTH, self.PIECE_HEIGHT))
+
+				for destination, capture in possible_moves:
+					y = destination[0]
+					x = destination[1]
+					height = y * self.PIECE_HEIGHT
+					width  = x * self.PIECE_WIDTH
+					xInc = self.PIECE_WIDTH/5
+					yInc = self.PIECE_HEIGHT/5
+					if capture:
+						#pygame.draw.rect(self.gameDisplay, self.DISPLAY_COLOR, 
+						#	(x*self.PIECE_WIDTH, y*self.PIECE_HEIGHT, self.PIECE_WIDTH, self.PIECE_HEIGHT), width=10)
+						pygame.draw.polygon(self.gameDisplay, self.DISPLAY_COLOR,
+							points=[(width, height), (width + xInc, height), (width, height + yInc)])
+						pygame.draw.polygon(self.gameDisplay, self.DISPLAY_COLOR,
+							points=[(width+self.PIECE_WIDTH, height), (width+self.PIECE_WIDTH - xInc, height), (width + self.PIECE_WIDTH, height + yInc)])
+						pygame.draw.polygon(self.gameDisplay, self.DISPLAY_COLOR,
+							points=[(width, height+self.PIECE_HEIGHT), (width + xInc, height+self.PIECE_HEIGHT), (width, height + self.PIECE_HEIGHT - yInc)])
+						pygame.draw.polygon(self.gameDisplay, self.DISPLAY_COLOR,
+							points=[(width + self.PIECE_WIDTH, height + self.PIECE_HEIGHT), (width + self.PIECE_WIDTH - xInc, height + self.PIECE_HEIGHT),
+									(width + self.PIECE_WIDTH, height + self.PIECE_HEIGHT - yInc)])
+					else:
+						pygame.draw.circle(self.gameDisplay, self.DISPLAY_COLOR, (x*self.PIECE_WIDTH + self.PIECE_WIDTH/2, 
+										   y*self.PIECE_HEIGHT + self.PIECE_HEIGHT/2), self.PIECE_WIDTH/7)
+
+				self.board.displayPieces()
+				pygame.display.update()
+			# si es el segundo click y la casilla es accesible para nuestro equipo
+			elif self.click_state == 1 and self.board.accessiblePosition((i, j), self.board.turn%2):
+				self.destination = (i, j)
+				self.click_state = 2
+			else:
+				self.click_state = 0	
+				self.origin = (-1, -1)
+				self.destination = (-1, -1)
+				#self.board.displayBoard()
+
+	def keyboardEvents(self, key):
+		if self.promotion:
+			if key == pygame.key.key_code("q"):
+				self.move.promoted = Piece.QUEEN_ID
+				self.promotion = False
+				self.handleMouseEvents = True
+				self.handleUpdates = True
+				self.executeMove = True
+			elif key == pygame.key.key_code("w"):
+				self.move.promoted = Piece.ROOK_ID
+				self.promotion = False
+				self.handleMouseEvents = True
+				self.handleUpdates = True
+				self.executeMove = True
+			elif key == pygame.key.key_code("e"):
+				self.move.promoted = Piece.BISHOP_ID
+				self.promotion = False
+				self.handleMouseEvents = True
+				self.handleUpdates = True
+				self.executeMove = True
+			elif key == pygame.key.key_code("r"):
+				self.move.promoted = Piece.KNIGHT_ID
+				self.promotion = False
+				self.handleMouseEvents = True
+				self.handleUpdates = True
+				self.executeMove = True
 
 	def displayBoard(self):
 		self.gameDisplay.blit(self.BOARD_IMG, (0, 0))
@@ -180,6 +257,15 @@ class PyChess():
 
 	def update(self):
 		pygame.display.update()
+	
+	# Returns a list containing tuples (destination, capture)
+	def obtainPossibleMoves(self, origin):
+		possible_moves = []
+		for move in self.legalMoves:
+			if move.origin == origin:
+				possible_moves.append((move.dest, move.capture))
+		
+		return possible_moves
 
 
 if __name__ == "__main__":

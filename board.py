@@ -461,7 +461,7 @@ class Board():
 		elif piece_id[1] == Piece.ROOK_ID:
 			if origin[1] == 7:
 				self.castlingRights[ind] = False
-			else:
+			elif origin[1] == 0:
 				self.castlingRights[ind+1] = False
 
 		if move.castling != None:
