@@ -98,11 +98,19 @@ class Board():
 
 		self.pyChess.update()
 
-	def displayPieces(self, exclude=[]):
-		for (i, row) in enumerate(self.board):
-			for (j, piece) in enumerate(row):
-				if piece[0] != -1 and not piece[2] in exclude:
-					self.pyChess.displayPiece(piece[0], piece[1], j, i)
+	# exclude --> list of pieces to exclude
+	# invert  --> exclude becomes the list of pieces to draw
+	def displayPieces(self, exclude=[], invert=False):
+		if invert:
+			for (i, row) in enumerate(self.board):
+				for (j, piece) in enumerate(row):
+					if piece[0] != -1 and piece[2] in exclude:
+						self.pyChess.displayPiece(piece[0], piece[1], j, i)
+		else:
+			for (i, row) in enumerate(self.board):
+				for (j, piece) in enumerate(row):
+					if piece[0] != -1 and not piece[2] in exclude:
+						self.pyChess.displayPiece(piece[0], piece[1], j, i)
 
 	def sumTuples(self, t1, t2):
 		return (t1[0]+t2[0], t1[1]+t2[1])

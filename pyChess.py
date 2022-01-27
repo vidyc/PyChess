@@ -42,6 +42,7 @@ class PyChess():
 	PIECE_MOVE_ANIMATION_FRAMES = 5
 
 	DISPLAY_COLOR = (25, 77, 0)
+	CHECK_COLOR   = (180, 20, 20)
 
 	PIECE_IMAGES = { (Piece.WHITE_ID, Piece.PAWN_ID):  WHITE_PAWN_IMG,
 					(Piece.BLACK_ID, Piece.PAWN_ID):   BLACK_PAWN_IMG,
@@ -72,104 +73,127 @@ class PyChess():
 
 	def startGame(self):
 		self.isGameOver = False
-		self.restart = True
 
 		self.handleMouseEvents = True
 		self.handleKeyboardEvents = True
-
 		self.handleUpdates = True
-
 		self.handleRendering = True
 
-		while self.restart:
-			self.framecount = 0
-			self.click_state = 0
-			
-			self.origin = (-1, -1)
-			self.destination = (-1, -1)
-			
-			self.move = None
-			self.legalMoves = []
-			self.calculatedLegalMoves = False
-			self.executeMove = False
+		self.framecount = 0
+		self.click_state = 0
+		
+		self.origin = (-1, -1)
+		self.destination = (-1, -1)
+		
+		self.move = None
+		self.legalMoves = []
+		self.calculatedLegalMoves = False
+		self.executeMove = False
 
-			self.pieceAnimationPosition = None
-			self.animateMove = False
-			self.animationFrames = PyChess.PIECE_MOVE_ANIMATION_FRAMES
-			self.posDelta = (PyChess.PIECE_WIDTH / self.animationFrames, PyChess.PIECE_HEIGHT / self.animationFrames)
-			self.animationImg = None
-			self.animationpieceId = ""
+		self.check = False
+		self.checkedKingId  = ""
+		self.checkedKingPos = None
 
-			self.promotion = False
-			while not self.isGameOver:
-				self.FPS_CLOCK.tick(180)
+		self.pieceAnimationPosition = None
+		self.animateMove = False
+		self.animationFrames = PyChess.PIECE_MOVE_ANIMATION_FRAMES
+		self.posDelta = (PyChess.PIECE_WIDTH / self.animationFrames, PyChess.PIECE_HEIGHT / self.animationFrames)
+		self.animationImg = None
+		self.animationpieceId = ""
 
-				######################################################
-				################### EVENT HANDLING ###################
-				######################################################
-				for event in pygame.event.get():
-					if self.handleMouseEvents and event.type == pygame.MOUSEBUTTONDOWN:
-						self.mouseEvents()
-					elif self.handleKeyboardEvents and event.type == pygame.KEYDOWN:
-						self.keyboardEvents(event)
-					elif event.type == pygame.QUIT:
-						sys.exit("Quitting...")
+		self.popUpAnimationFrames = PyChess.PIECE_MOVE_ANIMATION_FRAMES / 2
+		self.animatePopUp = False
+		self.popUpRect       = (0, 0, 0, 0)
+		self.popUpWidthDelta = PyChess.PIECE_WIDTH / PyChess.PIECE_MOVE_ANIMATION_FRAMES
+		self.popHeightDelta  = 4 * PyChess.PIECE_HEIGHT / PyChess.PIECE_MOVE_ANIMATION_FRAMES
 
-				####################################################
-				###################  UPDATE GAME ###################
-				####################################################
+		self.promotion = False
+		while 1:
+			self.FPS_CLOCK.tick(180)
 
-				if self.handleUpdates and self.framecount % 4 == 0:
-					if not self.calculatedLegalMoves:
-						self.legalMoves = self.board.calculateLegalMoves()
-						self.isGameOver = self.board.checkmate or self.board.stalemate
-						self.calculatedLegalMoves = True
+			######################################################
+			################### EVENT HANDLING ###################
+			######################################################
+			for event in pygame.event.get():
+				if self.handleMouseEvents and event.type == pygame.MOUSEBUTTONDOWN:
+					self.mouseEvents()
+				elif self.handleKeyboardEvents and event.type == pygame.KEYDOWN:
+					self.keyboardEvents(event)
+				elif event.type == pygame.QUIT:
+					sys.exit("Quitting...")
+
+			#####################################################
+			#################### UPDATE GAME ####################
+			#####################################################
+
+			if self.handleUpdates and self.framecount % 2 == 0:
+				if not self.calculatedLegalMoves:
+					self.legalMoves = self.board.calculateLegalMoves()
+					self.isGameOver = self.board.checkmate or self.board.stalemate
+					self.calculatedLegalMoves = True
+					
+					if self.board.check:
+						self.check = True
+						self.checkedKingPos = self.board.kingPositions[self.board.turn%2]
+						self.checkedKingId  = self.board.board[self.checkedKingPos[0]][self.checkedKingPos[1]][2] 
+						
 						if self.isGameOver:
+							self.handleUpdates = False
+							self.handleKeyboardEvents = False
+							self.handleMouseEvents = False
+
+
+				if self.click_state == 2:
+					# check if the selected move is a legal move
+					for m in self.legalMoves:
+						if m.origin == self.origin and m.dest == self.destination:
+							self.executeMove = True
+							self.move = m
+							self.move.print()
 							break
 
-					if self.click_state == 2:
-						# check if the selected move is a legal move
-						for m in self.legalMoves:
-							if m.origin == self.origin and m.dest == self.destination:
-								self.executeMove = True
-								self.move = m
-								self.move.print()
-								break
-
-						if not self.executeMove:
-							self.click_state = 0
-							self.origin = (-1, -1)
-							self.destination = (-1, -1)
-							self.board.displayBoard()
-						elif self.move.promoted != None:	
-							self.executeMove = False
-							self.promotion = True
-							self.click_state = 0
-							self.handleUpdates = False
-							self.handleMouseEvents = False
-	
-					if self.executeMove:
-						self.board.doMove(self.move)
-						self.board.printBoard()
-						self.board.displayBoard()
-
+					if not self.executeMove:
 						self.click_state = 0
-						
 						self.origin = (-1, -1)
 						self.destination = (-1, -1)
-						
-						self.legalMoves = []
-						self.calculatedLegalMoves = False
+						self.board.displayBoard()
+					elif self.move.promoted != None:	
 						self.executeMove = False
-				
-				if self.handleRendering and self.framecount == 0:
+						self.promotion = True
+						self.click_state = 0
+						self.handleUpdates = False
+						self.handleMouseEvents = False
+
+				if self.executeMove:
+					self.board.doMove(self.move)
+					self.board.printBoard()
+					self.board.displayBoard()
+
+					self.click_state = 0
 					
-					if self.animateMove and self.animationFrames > 0:
+					self.origin = (-1, -1)
+					self.destination = (-1, -1)
+					
+					self.legalMoves = []
+					self.check = False
+					self.checkedKingId = ""
+					self.checkedKingPos = None
+					self.calculatedLegalMoves = False
+					self.executeMove = False
+			
+			#####################################################
+			#################### RENDER GAME ####################
+			#####################################################
+
+			if self.handleRendering and self.framecount == 0:
+				
+				if self.animateMove:
+					if self.animationFrames > 0:
 						self.pieceAnimationPosition = (self.pieceAnimationPosition[0] + self.posDelta[0],
-													   self.pieceAnimationPosition[1] + self.posDelta[1])
+													self.pieceAnimationPosition[1] + self.posDelta[1])
 
 						self.displayBoard()
-						self.board.displayPieces(exclude=[self.animationpieceId])
+						self.board.displayPieces(exclude=[self.animationpieceId], invert=False)
 						self.gameDisplay.blit(self.animationImg, (self.pieceAnimationPosition[0], self.pieceAnimationPosition[1],
 							self.PIECE_WIDTH, self.PIECE_HEIGHT))
 						
@@ -180,20 +204,37 @@ class PyChess():
 
 						self.handleKeyboardEvents = True
 						self.handleMouseEvents = True
-						self.handleUpdates = True				
-
-					pygame.display.update()
+						self.handleUpdates = True
+				elif self.animatePopUp:
+					# idea: compute a rectangle each frame, growing deltaWidth and deltaHeight, then draw it
+					# then detect mouseclicks on that rectangle and determine an action
+					# maybe a good idea to build a class for it		
+					if self.animationFrames > 0:
+						self.popUpRect = ( self.popUpRect[0], self.popUpRect[1], self.popUpRect[2] + self.popUpWidthDelta, self.popUpRect[3] + self.popHeightDelta )
+						pygame.draw.rect(self.gameDisplay, self.CHECK_COLOR, self.popUpRect)
+						self.animationFrames -= 1
+					else:
+						self.animatePopUp = False
+						self.popUpRect = None
+					print("popup")		
+				elif self.check:
+					pygame.draw.rect(self.gameDisplay, self.CHECK_COLOR, 
+						(self.checkedKingPos[1]*self.PIECE_WIDTH, self.checkedKingPos[0]*self.PIECE_HEIGHT,
+							self.PIECE_WIDTH, self.PIECE_HEIGHT))
+					self.board.displayPieces(exclude=[self.checkedKingId], invert=True)
 				
-				self.framecount = (self.framecount + 1) % 6
+				pygame.display.update()
+			
+			self.framecount = (self.framecount + 1) % 3
 
-			restart_str = input("Restart game?: ").lower()
-			accepted_strings = ["yes", "y", "true"]
-			if restart_str in accepted_strings:
-				self.restart = True
-				self.board.initialBoardState()
-				self.isGameOver = False
-			else:
-				self.restart = False
+			#restart_str = input("Restart game?: ").lower()
+			#accepted_strings = ["yes", "y", "true"]
+			#if restart_str in accepted_strings:
+			#	self.restart = True
+			#	self.board.initialBoardState()
+			#	self.isGameOver = False
+			#else:
+			#	self.restart = False
 
 	def mouseEvents(self):
 		left, middle, right = pygame.mouse.get_pressed()
