@@ -3,9 +3,7 @@ from turtle import pos
 from board import Board
 from piece import Piece
 import pygame
-from pgu import gui
 import sys
-import tkinter as tk
 from tkinter import *
 
 class PyChess():
@@ -118,7 +116,7 @@ class PyChess():
 				if self.handleMouseEvents and event.type == pygame.MOUSEBUTTONDOWN:
 					self.mouseEvents()
 				elif self.handleKeyboardEvents and event.type == pygame.KEYDOWN:
-					self.keyboardEvents(event)
+					self.keyboardEvents(event.key)
 				elif event.type == pygame.QUIT:
 					sys.exit("Quitting...")
 
@@ -157,11 +155,12 @@ class PyChess():
 						self.origin = (-1, -1)
 						self.destination = (-1, -1)
 						self.board.displayBoard()
-					elif self.move.promoted != None:	
+					elif self.move.promoted != None:
 						self.executeMove = False
 						self.promotion = True
 						self.click_state = 0
 						self.handleUpdates = False
+						self.handleKeyboardEvents = True
 						self.handleMouseEvents = False
 
 				if self.executeMove:
@@ -313,24 +312,28 @@ class PyChess():
 				self.handleMouseEvents = True
 				self.handleUpdates = True
 				self.executeMove = True
+				self.handleRendering = True
 			elif key == pygame.key.key_code("w"):
 				self.move.promoted = Piece.ROOK_ID
 				self.promotion = False
 				self.handleMouseEvents = True
 				self.handleUpdates = True
 				self.executeMove = True
+				self.handleRendering = True
 			elif key == pygame.key.key_code("e"):
 				self.move.promoted = Piece.BISHOP_ID
 				self.promotion = False
 				self.handleMouseEvents = True
 				self.handleUpdates = True
 				self.executeMove = True
+				self.handleRendering = True
 			elif key == pygame.key.key_code("r"):
 				self.move.promoted = Piece.KNIGHT_ID
 				self.promotion = False
 				self.handleMouseEvents = True
 				self.handleUpdates = True
 				self.executeMove = True
+				self.handleRendering = True
 
 	def displayBoard(self):
 		self.gameDisplay.blit(self.BOARD_IMG, (0, 0))

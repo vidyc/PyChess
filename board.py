@@ -1,5 +1,4 @@
 import numpy as np
-from gmpy2 import xmpz
 import copy
 import pygame
 
