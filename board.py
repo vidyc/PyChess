@@ -318,7 +318,7 @@ class Board():
 				promoted = None
 				if targetPos[0] == finalY[team]:
 					for type in self.POSSIBLE_PROMOTION:
-						legalMoves.append(Move(team, pos, targetPos, promoted=type))
+						legalMoves.append(Move(team, pos, targetPos, capture=True, promoted=type))
 				else:
 					legalMoves.append(Move(team, pos, targetPos, capture=True, promoted=None))
 

@@ -1,10 +1,9 @@
 from distutils.util import execute
-from turtle import pos
 from board import Board
 from piece import Piece
 import pygame
 import sys
-from tkinter import *
+import time
 
 class PyChess():
 
@@ -37,10 +36,11 @@ class PyChess():
 	WHITE_PAWN_IMG = pygame.transform.smoothscale(pygame.image.load("assets/white_pawn.png"), (PIECE_WIDTH, PIECE_HEIGHT))
 	WHITE_ROOK_IMG = pygame.transform.smoothscale(pygame.image.load("assets/white_rook.png"), (PIECE_WIDTH, PIECE_HEIGHT))
 
-	PIECE_MOVE_ANIMATION_FRAMES = 5
+	PIECE_MOVE_ANIMATION_FRAMES = 8
 
 	DISPLAY_COLOR = (25, 77, 0)
 	CHECK_COLOR   = (180, 20, 20)
+	POPUP_COLOR   = (200, 200, 200)
 
 	PIECE_IMAGES = { (Piece.WHITE_ID, Piece.PAWN_ID):  WHITE_PAWN_IMG,
 					(Piece.BLACK_ID, Piece.PAWN_ID):   BLACK_PAWN_IMG,
@@ -56,10 +56,10 @@ class PyChess():
 					(Piece.BLACK_ID, Piece.KING_ID):   BLACK_KING_IMG
 				    }
 
-	PROMOTION_STR = { "bishop": Piece.BISHOP_ID,
+	PROMOTION_STR = { "queen":  Piece.QUEEN_ID, 
 					  "knight": Piece.KNIGHT_ID,
 					  "rook":   Piece.ROOK_ID,
-					  "queen":  Piece.QUEEN_ID
+					  "bishop": Piece.BISHOP_ID,
 					}
 
 	def __init__(self):
@@ -92,6 +92,9 @@ class PyChess():
 		self.checkedKingId  = ""
 		self.checkedKingPos = None
 
+		self.previous_time = time.time_ns()
+		self.delta = 0
+
 		self.pieceAnimationPosition = None
 		self.animateMove = False
 		self.animationFrames = PyChess.PIECE_MOVE_ANIMATION_FRAMES
@@ -103,7 +106,8 @@ class PyChess():
 		self.animatePopUp = False
 		self.popUpRect       = (0, 0, 0, 0)
 		self.popUpWidthDelta = PyChess.PIECE_WIDTH / PyChess.PIECE_MOVE_ANIMATION_FRAMES
-		self.popHeightDelta  = 4 * PyChess.PIECE_HEIGHT / PyChess.PIECE_MOVE_ANIMATION_FRAMES
+		self.popUpHeightDelta  = 4 * PyChess.PIECE_HEIGHT / PyChess.PIECE_MOVE_ANIMATION_FRAMES
+		self.popUpPositions  = {}
 
 		self.promotion = False
 		while 1:
@@ -156,11 +160,24 @@ class PyChess():
 						self.destination = (-1, -1)
 						self.board.displayBoard()
 					elif self.move.promoted != None:
+						# we will block all events until the promotion pop-up window is drawn
+						self.animatePopUp = True
+						self.popUpAnimationFrames = PyChess.PIECE_MOVE_ANIMATION_FRAMES / 2
+						self.popUpWidthDelta = PyChess.PIECE_WIDTH / self.popUpAnimationFrames
+						self.popUpHeightDelta  = 4 * PyChess.PIECE_HEIGHT / self.popUpAnimationFrames
+
+						yDest = self.destination[0]
+						if self.board.turn % 2 == 1:
+							yDest = self.destination[0] - 3
+										
+						self.popUpRect = (self.destination[1] * PyChess.PIECE_WIDTH, yDest * PyChess.PIECE_HEIGHT, 0, 0)	
+
+						self.click_state = 3
+
 						self.executeMove = False
 						self.promotion = True
-						self.click_state = 0
 						self.handleUpdates = False
-						self.handleKeyboardEvents = True
+						self.handleKeyboardEvents = False
 						self.handleMouseEvents = False
 
 				if self.executeMove:
@@ -208,12 +225,27 @@ class PyChess():
 					# idea: compute a rectangle each frame, growing deltaWidth and deltaHeight, then draw it
 					# then detect mouseclicks on that rectangle and determine an action
 					# maybe a good idea to build a class for it		
-					if self.animationFrames > 0:
-						self.popUpRect = ( self.popUpRect[0], self.popUpRect[1], self.popUpRect[2] + self.popUpWidthDelta, self.popUpRect[3] + self.popHeightDelta )
-						pygame.draw.rect(self.gameDisplay, self.CHECK_COLOR, self.popUpRect)
-						self.animationFrames -= 1
+					if self.popUpAnimationFrames > 0:
+						self.popUpRect = ( self.popUpRect[0], self.popUpRect[1], self.popUpRect[2] + self.popUpWidthDelta, self.popUpRect[3] + self.popUpHeightDelta )
+						pygame.draw.rect(self.gameDisplay, PyChess.POPUP_COLOR, self.popUpRect)
+						print(self.popUpRect)
+						self.popUpAnimationFrames -= 1
 					else:
+						# draw the 4 possible promotion pieces
+						team  = self.board.turn % 2
+						types = list(PyChess.PROMOTION_STR.values())
+						x = self.destination[1]
+						y = self.destination[0]
+						incY = 1 if team == 0 else -1
+						for i in range(4):
+							self.popUpPositions[(y, x)] = types[i]
+							self.gameDisplay.blit(self.PIECE_IMAGES[(team, types[i])], 
+								(x*self.PIECE_WIDTH, y*self.PIECE_HEIGHT))
+							
+							y += incY
+
 						self.animatePopUp = False
+						self.handleMouseEvents = True
 						self.popUpRect = None
 					print("popup")		
 				elif self.check:
@@ -225,6 +257,11 @@ class PyChess():
 				pygame.display.update()
 			
 			self.framecount = (self.framecount + 1) % 3
+			
+			current_time = time.time_ns()
+			self.delta = current_time - self.previous_time
+			self.previous_time = current_time
+			#print(self.delta / 1e6)
 
 			#restart_str = input("Restart game?: ").lower()
 			#accepted_strings = ["yes", "y", "true"]
@@ -243,7 +280,40 @@ class PyChess():
 			i = int(mouseCoordinates[1] / self.PIECE_WIDTH)
 			j = int(mouseCoordinates[0] / self.PIECE_HEIGHT)
 
-			if self.board.enemyInPosition((i, j), (self.board.turn+1)%2)[0]:
+			print((i, j))
+
+			# si es el segundo click y la casilla es accesible para nuestro equipo
+			if self.click_state == 1 and self.board.accessiblePosition((i, j), self.board.turn%2):
+				self.destination = (i, j)
+				
+				self.pieceAnimationPosition = (self.origin[1] * self.PIECE_WIDTH, self.origin[0] * self.PIECE_HEIGHT)
+				self.animateMove = True
+				self.animationFrames = PyChess.PIECE_MOVE_ANIMATION_FRAMES
+				incY = i - self.origin[0]
+				incX = j - self.origin[1]
+				
+				self.posDelta = (incX * PyChess.PIECE_WIDTH / self.animationFrames, incY * PyChess.PIECE_HEIGHT / self.animationFrames)
+
+				pieceId = self.board.board[self.origin[0]][self.origin[1]]
+				self.animationImg = PyChess.PIECE_IMAGES[(pieceId[0], pieceId[1])]
+				self.animationpieceId = pieceId[2]
+
+				self.handleUpdates = False
+				self.handleKeyboardEvents = False
+				self.handleMouseEvents = False
+
+				self.click_state = 2
+			elif self.click_state == 3 and (i, j) in self.popUpPositions:
+				print("clicked inside popUp window")
+				self.move.promoted = self.popUpPositions[(i, j)]
+				
+				self.promotion = False
+				self.handleUpdates = True
+				self.executeMove = True
+
+				self.click_state = 0
+				self.popUpPositions = {}
+			elif self.board.enemyInPosition((i, j), (self.board.turn+1)%2)[0]:
 				self.click_state = 1
 				self.origin = (i, j)
 
@@ -276,29 +346,8 @@ class PyChess():
 
 				self.board.displayPieces()
 				pygame.display.update()
-			# si es el segundo click y la casilla es accesible para nuestro equipo
-			elif self.click_state == 1 and self.board.accessiblePosition((i, j), self.board.turn%2):
-				self.destination = (i, j)
-				
-				self.pieceAnimationPosition = (self.origin[1] * self.PIECE_WIDTH, self.origin[0] * self.PIECE_HEIGHT)
-				self.animateMove = True
-				self.animationFrames = PyChess.PIECE_MOVE_ANIMATION_FRAMES
-				incY = i - self.origin[0]
-				incX = j - self.origin[1]
-				
-				self.posDelta = (PyChess.PIECE_WIDTH / self.animationFrames, PyChess.PIECE_HEIGHT / self.animationFrames)
-				self.posDelta = (self.posDelta[0] * incX, self.posDelta[1] * incY)
-
-				pieceId = self.board.board[self.origin[0]][self.origin[1]]
-				self.animationImg = PyChess.PIECE_IMAGES[(pieceId[0], pieceId[1])]
-				self.animationpieceId = pieceId[2]
-
-				self.handleUpdates = False
-				self.handleKeyboardEvents = False
-				self.handleMouseEvents = False
-
-				self.click_state = 2
 			else:
+				self.popUpPositions = {}
 				self.click_state = 0	
 				self.origin = (-1, -1)
 				self.destination = (-1, -1)
@@ -307,6 +356,7 @@ class PyChess():
 	def keyboardEvents(self, key):
 		if self.promotion:
 			if key == pygame.key.key_code("q"):
+				print("QUEEN")
 				self.move.promoted = Piece.QUEEN_ID
 				self.promotion = False
 				self.handleMouseEvents = True
