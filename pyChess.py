@@ -273,12 +273,12 @@ class PyChess():
 			#	self.restart = False
 
 	def mouseEvents(self):
+		mouseX, mouseY = pygame.mouse.get_pos()
 		left, middle, right = pygame.mouse.get_pressed()
 
 		if left:
-			mouseCoordinates = pygame.mouse.get_pos()
-			i = int(mouseCoordinates[1] / self.PIECE_WIDTH)
-			j = int(mouseCoordinates[0] / self.PIECE_HEIGHT)
+			i = int(mouseY / self.PIECE_WIDTH)
+			j = int(mouseX / self.PIECE_HEIGHT)
 
 			print((i, j))
 
@@ -348,10 +348,11 @@ class PyChess():
 				pygame.display.update()
 			else:
 				self.popUpPositions = {}
+
 				self.click_state = 0	
 				self.origin = (-1, -1)
 				self.destination = (-1, -1)
-				#self.board.displayBoard()
+				self.board.displayBoard()
 
 	def keyboardEvents(self, key):
 		if self.promotion:
