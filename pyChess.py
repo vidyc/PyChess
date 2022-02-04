@@ -109,6 +109,10 @@ class PyChess():
 		self.popUpHeightDelta  = 4 * PyChess.PIECE_HEIGHT / PyChess.PIECE_MOVE_ANIMATION_FRAMES
 		self.popUpPositions  = {}
 
+
+		self.board.computeFEN()
+		print(self.board.getFEN())
+
 		self.promotion = False
 		while 1:
 			self.FPS_CLOCK.tick(180)
@@ -184,6 +188,7 @@ class PyChess():
 					self.board.doMove(self.move)
 					self.board.printBoard()
 					self.board.displayBoard()
+					print(self.board.getFEN())
 
 					self.click_state = 0
 					

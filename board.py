@@ -7,6 +7,8 @@ from move import Move
 
 class Board():
 	
+	INITIAL_FEN = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1"
+
 	BOARD_SIZE = 8
 
 	UP = 0
@@ -21,7 +23,7 @@ class Board():
 	DOWN_LEFT = 7
 	DIAGONAL = [UP_LEFT, UP_RIGHT, DOWN_RIGHT, DOWN_LEFT]
 
-	POSSIBLE_PROMOTION = [ Piece.KNIGHT_ID, Piece.BISHOP_ID, Piece.ROOK_ID, Piece.QUEEN_ID]
+	POSSIBLE_PROMOTION = [Piece.KNIGHT_ID, Piece.BISHOP_ID, Piece.ROOK_ID, Piece.QUEEN_ID]
 
 	# board is a list of piece id
 	board = [[(-1, -1)] * 8 for i in range(8)]
@@ -65,6 +67,7 @@ class Board():
 		self.numWhitePieces = 16
 		self.numBlackPieces = 16
 		self.turn = 0
+		self.halfmoveClock = 0
 		self.castlingRights = [True] * 4
 		self.kingPositions = { Piece.WHITE_ID: Piece.INITIAL_POSITIONS[(Piece.WHITE_ID, Piece.KING_ID)][0],
 					      Piece.BLACK_ID: Piece.INITIAL_POSITIONS[(Piece.BLACK_ID, Piece.KING_ID)][0] }
@@ -73,6 +76,7 @@ class Board():
 		self.stalemate = False
 		self.numCheckers = 0
 		self.enPassantPos = None
+		self.FEN = Board.INITIAL_FEN
 		self.printBoard()
 		self.displayBoard()
 
@@ -84,7 +88,7 @@ class Board():
 				switch = {-1: 'o',0: 'p',1: 'n',2: 'b',3: 'r',4: 'q',5: 'k'}
 
 				char = switch[piece[1]]
-				if piece[0] == 0:
+				if piece[0] == 1:
 					str += (char + " ")
 				else:
 					str += (char.upper() + " ")
@@ -110,6 +114,69 @@ class Board():
 				for (j, piece) in enumerate(row):
 					if piece[0] != -1 and not piece[2] in exclude:
 						self.pyChess.displayPiece(piece[0], piece[1], j, i)
+
+	def computeFEN(self):
+		emptyCounter = 0
+		FEN = ""
+
+		switch = {0: 'p',1: 'n',2: 'b',3: 'r',4: 'q',5: 'k'}
+
+		for i, row in enumerate(self.board):
+			for pos in row:
+				if pos[0] == -1:
+					emptyCounter += 1
+				else:
+					if emptyCounter > 0:
+						FEN += str(emptyCounter)
+						emptyCounter = 0
+					
+					char = switch[pos[1]]
+					if pos[0] == 1:
+						FEN += char
+					else:
+						FEN += char.upper()
+
+			if emptyCounter > 0:
+				FEN += str(emptyCounter)
+				emptyCounter = 0
+
+			if i < 7:
+				FEN += "/"
+		
+		if self.turn % 2 == 0:
+			FEN += " w "
+		else:
+			FEN += " b "
+
+		castlingRightCharacters = ['K', 'Q', 'k', 'q']
+		availableCastlings = False
+		for i, val in enumerate(self.castlingRights):
+			if val:
+				FEN += castlingRightCharacters[i]
+				availableCastlings = True
+
+		if not availableCastlings:
+			FEN += "-"
+
+		if self.enPassantPos == None:
+			FEN += " - "
+		else:
+			# convert i, j notation to standard chess notation
+			row = str(8 - self.enPassantPos[0])
+			col = chr(97 + self.enPassantPos[1])
+			FEN += (" " + col + row + " ")
+
+		FEN += str(self.halfmoveClock)
+		
+		FEN += " "
+
+		fullmoveCounter = 1 + int(self.turn / 2)
+		FEN += str(fullmoveCounter)
+
+		self.FEN = FEN
+
+	def getFEN(self):
+		return self.FEN
 
 	def sumTuples(self, t1, t2):
 		return (t1[0]+t2[0], t1[1]+t2[1])
@@ -301,6 +368,7 @@ class Board():
 				for incX in [-1, 1]:
 					candidatePos = (targetPos[0], targetPos[1]+incX)
 					enemy, type = self.enemyInPosition(candidatePos, team)
+
 					if enemy and type == Piece.PAWN_ID:
 						# indicate in this legalMove that enPassant would be set
 						print("triggered en passant")
@@ -519,4 +587,11 @@ class Board():
 
 		self.turn += 1
 
+		if move.capture or piece_id[1] == Piece.PAWN_ID:
+			self.halfmoveClock = 0
+		else:
+			self.halfmoveClock += 1
+		
+
+		self.computeFEN()
 		self.check, self.numCheckers = self.isKingInCheck(self.turn%2)		
