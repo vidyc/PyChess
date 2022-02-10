@@ -1,4 +1,3 @@
-from distutils.util import execute
 from board import Board
 from piece import Piece
 import pygame
